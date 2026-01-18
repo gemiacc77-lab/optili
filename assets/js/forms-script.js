@@ -158,6 +158,14 @@ function initializeFormHandlers(config) {
         const nextButtons = document.querySelectorAll('.btn-next');
         const prevButtons = document.querySelectorAll('.btn-prev');
         const submitButton = document.querySelector('.btn-submit');
+        
+        // Fix: Force enable submit button on load to prevent browser caching disabled state
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.classList.remove('sending');
+            submitButton.textContent = 'Submit Full Brief';
+        }
+
         const form = document.getElementById('projectBriefForm');
         const formLoading = document.getElementById('formLoading');
         const uploadProgressContainer = document.getElementById('uploadProgressContainer');
@@ -601,8 +609,25 @@ function initializeFormHandlers(config) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 formLoading.classList.add('active');
-                let allSectionsValid = true;
                 
+                // 1. Check File first with specific message
+                if (fileDataTransfer.files.length === 0) {
+                     formLoading.classList.remove('active');
+                     showNotification('Please upload your ZIP file before submitting.', 'error');
+                     if(fileValidationMessage) {
+                         fileValidationMessage.textContent = 'ZIP file is required';
+                         fileValidationMessage.className = 'validation-message error show';
+                     }
+                     // Force highlight the upload box
+                     if(fileUploadWrapper) {
+                         fileUploadWrapper.style.borderColor = 'var(--error-color)';
+                         gsap.to(fileUploadWrapper, { x: -10, duration: 0.1, repeat: 3, yoyo: true, onComplete: () => gsap.set(fileUploadWrapper, { x: 0 }) });
+                     }
+                     return;
+                }
+
+                // 2. Check general fields
+                let allSectionsValid = true;
                 for (let i = 0; i < formSections.length; i++) {
                     const sectionElement = formSections[i];
                     const requiredInputs = sectionElement.querySelectorAll('input[required], textarea[required], select[required]');
@@ -617,13 +642,11 @@ function initializeFormHandlers(config) {
                             }
                         }
                     }
-                    if (i === 4 && fileDataTransfer.files.length === 0) {
-                        allSectionsValid = false;
-                    }
                 }
+
                 if (!allSectionsValid) {
                     formLoading.classList.remove('active');
-                    showNotification(`Please fill in all required fields correctly.`, 'error');
+                    showNotification(`Please review the form. Some required fields are missing.`, 'error');
                     for (let i = 0; i < formSections.length; i++) {
                         const sectionElement = formSections[i];
                         const requiredInputs = sectionElement.querySelectorAll('input[required], textarea[required], select[required]');
@@ -641,19 +664,28 @@ function initializeFormHandlers(config) {
                                 }
                             }
                         }
-                        if (sectionHasError || (i === 4 && fileDataTransfer.files.length === 0)) {
+                        if (sectionHasError) {
                             navigateToSection(i);
                             break;
                         }
                     }
                     return;
                 }
+
+                // 3. Check Turnstile specifically
                 const turnstileResponse = document.querySelector('[name="cf-turnstile-response"]');
                 if (!turnstileResponse || !turnstileResponse.value) {
                     formLoading.classList.remove('active');
-                    showNotification('Please complete the security verification.', 'error');
+                    showNotification('Please check the security box (CAPTCHA) below.', 'error');
+                    // Scroll to Turnstile
+                    const turnstileContainer = document.querySelector('.cf-turnstile');
+                    if(turnstileContainer) {
+                         turnstileContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                         gsap.to(turnstileContainer, { scale: 1.1, duration: 0.2, yoyo: true, repeat: 1 });
+                    }
                     return;
                 }
+
                 const submitButton = document.getElementById('submitBriefButton');
                 if(submitButton) {
                    submitButton.textContent = 'Uploading ZIP File...';
